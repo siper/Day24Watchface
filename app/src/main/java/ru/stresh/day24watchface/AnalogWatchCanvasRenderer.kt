@@ -3,8 +3,10 @@ package ru.stresh.day24watchface
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.CornerPathEffect
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PointF
 import android.graphics.Rect
 import android.view.SurfaceHolder
 import androidx.core.content.res.ResourcesCompat
@@ -49,12 +51,13 @@ class AnalogWatchCanvasRenderer(
     private val clockHandPaint = Paint().apply {
         isAntiAlias = true
         strokeWidth = 2.dp
+        pathEffect = CornerPathEffect(10f)
     }
 
     private val textPaint = Paint().apply {
         isAntiAlias = true
-        textSize = 18.sp
-        typeface = ResourcesCompat.getFont(context, R.font.poppins_regular)
+        textSize = 14.sp
+        typeface = ResourcesCompat.getFont(context, R.font.barlow_light)
         textAlign = Paint.Align.CENTER
     }
     private val hourMarksPaint = Paint().apply {
@@ -130,9 +133,8 @@ class AnalogWatchCanvasRenderer(
                 bounds,
                 Color.WHITE,
             )
-            drawHourMarks(canvas, bounds, Color.WHITE)
-            drawMinuteMarks(canvas, bounds, Color.WHITE)
-            drawCenterCircle(canvas, bounds)
+//            drawHourMarks(canvas, bounds, Color.WHITE)
+            drawMinuteMarks(canvas, bounds, Color.GRAY)
         }
     }
 
@@ -182,18 +184,21 @@ class AnalogWatchCanvasRenderer(
                 drawPath(minuteHandBorder, clockHandPaint)
             }
 
+            drawHourAndMinuteCenterCircle(canvas, bounds)
+
             if (!drawAmbient) {
-                clockHandPaint.color = Color.WHITE
+                drawSecondsCenterCircle(canvas, bounds)
+                clockHandPaint.color = Color.RED
 
                 val secondsPerSecondHandRotation = Duration.ofMinutes(1).seconds
                 val secondsRotation = secondOfDay.rem(secondsPerSecondHandRotation) * 360f /
                         secondsPerSecondHandRotation
-                clockHandPaint.color = Color.WHITE
 
                 withRotation(secondsRotation, bounds.exactCenterX(), bounds.exactCenterY()) {
                     drawPath(secondHand, clockHandPaint)
                 }
             }
+            drawMainCenterCircle(canvas, bounds)
         }
     }
 
@@ -245,25 +250,37 @@ class AnalogWatchCanvasRenderer(
         val bottom = centerY - gapBetweenHandAndCenter * width
         val path = Path()
 
-        if (roundedCornerXRadius != 0.0f || roundedCornerYRadius != 0.0f) {
-            path.addRoundRect(
-                left,
-                top,
-                right,
-                bottom,
-                roundedCornerXRadius,
-                roundedCornerYRadius,
-                Path.Direction.CW
-            )
-        } else {
-            path.addRect(
-                left,
-                top,
-                right,
-                bottom,
-                Path.Direction.CW
-            )
-        }
+        val a = PointF(left + (thickness / 2 * width) + 2, top)
+        val b = PointF(left + (thickness / 2 * width) + 4, top)
+        val c = PointF(right, bottom)
+        val d = PointF(left, bottom)
+
+        path.moveTo(a.x, a.y)
+        path.lineTo(a.x, a.y)
+        path.lineTo(b.x, b.y)
+        path.lineTo(c.x, c.y)
+        path.lineTo(d.x, d.y)
+        path.close()
+
+//        if (roundedCornerXRadius != 0.0f || roundedCornerYRadius != 0.0f) {
+//            path.addRoundRect(
+//                left,
+//                top,
+//                right,
+//                bottom,
+//                roundedCornerXRadius,
+//                roundedCornerYRadius,
+//                Path.Direction.CW
+//            )
+//        } else {
+//            path.addRect(
+//                left,
+//                top,
+//                right,
+//                bottom,
+//                Path.Direction.CW
+//            )
+//        }
         return path
     }
 
@@ -274,17 +291,29 @@ class AnalogWatchCanvasRenderer(
     ) {
         val textBounds = Rect()
         textPaint.color = outerElementColor
-        var angle = 15f
+        var angle = 0f
         for (i in HOUR_MARKS.indices) {
             textPaint.getTextBounds(HOUR_MARKS[i], 0, HOUR_MARKS[i].length, textBounds)
             val y = HOUR_NUMBERS_MARGIN / 2 - (textPaint.descent() + textPaint.ascent()) / 2
             canvas.withRotation(angle, bounds.exactCenterX(), bounds.exactCenterY()) {
-                canvas.drawText(
-                    HOUR_MARKS[i],
-                    bounds.exactCenterX(),
-                    y,
-                    textPaint
-                )
+                if (i in 4..8) {
+                    val rotationY = y + (textPaint.descent() + textPaint.ascent()) / 2
+                    canvas.withRotation(180f, bounds.exactCenterX(), rotationY) {
+                        canvas.drawText(
+                            HOUR_MARKS[i],
+                            bounds.exactCenterX(),
+                            y,
+                            textPaint
+                        )
+                    }
+                } else {
+                    canvas.drawText(
+                        HOUR_MARKS[i],
+                        bounds.exactCenterX(),
+                        y,
+                        textPaint
+                    )
+                }
             }
             angle += 30
         }
@@ -296,7 +325,7 @@ class AnalogWatchCanvasRenderer(
         outerElementColor: Int
     ) {
         hourMarksPaint.color = outerElementColor
-        var angle = 0f
+        var angle = 15f
         for (i in 1..HOUR_MARKS_COUNT) {
             canvas.withRotation(angle, bounds.exactCenterX(), bounds.exactCenterY()) {
                 canvas.drawLine(
@@ -338,7 +367,7 @@ class AnalogWatchCanvasRenderer(
         }
     }
 
-    private fun drawCenterCircle(
+    private fun drawHourAndMinuteCenterCircle(
         canvas: Canvas,
         bounds: Rect,
     ) {
@@ -346,7 +375,33 @@ class AnalogWatchCanvasRenderer(
         canvas.drawCircle(
             bounds.exactCenterX(),
             bounds.exactCenterY(),
-            CENTER_CIRCLE_RADIUS,
+            CENTER_HOUR_AND_MINUTE_CIRCLE_RADIUS,
+            centerCirclePaint
+        )
+    }
+
+    private fun drawSecondsCenterCircle(
+        canvas: Canvas,
+        bounds: Rect,
+    ) {
+        centerCirclePaint.color = Color.RED
+        canvas.drawCircle(
+            bounds.exactCenterX(),
+            bounds.exactCenterY(),
+            CENTER_SECONDS_CIRCLE_RADIUS,
+            centerCirclePaint
+        )
+    }
+
+    private fun drawMainCenterCircle(
+        canvas: Canvas,
+        bounds: Rect,
+    ) {
+        centerCirclePaint.color = Color.BLACK
+        canvas.drawCircle(
+            bounds.exactCenterX(),
+            bounds.exactCenterY(),
+            CENTER_MAIN_CIRCLE_RADIUS,
             centerCirclePaint
         )
     }
@@ -354,19 +409,20 @@ class AnalogWatchCanvasRenderer(
     companion object {
         private const val FRAME_PERIOD_MS_DEFAULT: Long = 16L
 
-        private val HOUR_MARKS =
-            arrayOf("1", "3", "5", "7", "9", "11", "13", "15", "17", "19", "21", "23")
+        private val HOUR_MARKS = arrayOf("0", "2", "4", "6", "8", "10", "12", "14", "16", "18", "20", "22")
         private const val HOUR_MARKS_COUNT = 12
         private const val HOUR_MARKS_WIDTH = 4f
-        private const val HOUR_MARKS_SIZE = 55f
+        private const val HOUR_MARKS_SIZE = 35f
         private const val HOUR_MARKS_START = 10f
         private const val HOUR_NUMBERS_MARGIN = 45f
 
-        private const val MINUTE_MARKS_SIZE = 10f
-        private const val MINUTE_MARKS_MARGIN = 45f
+        private const val MINUTE_MARKS_SIZE = 8f
+        private const val MINUTE_MARKS_MARGIN = 18f
         private const val MINUTE_MARKS_WIDTH = 2f
 
-        private const val CENTER_CIRCLE_RADIUS = 10f
+        private const val CENTER_HOUR_AND_MINUTE_CIRCLE_RADIUS = 15f
+        private const val CENTER_SECONDS_CIRCLE_RADIUS = 10f
+        private const val CENTER_MAIN_CIRCLE_RADIUS = 5f
 
         private const val WATCH_HAND_SCALE = 1.0f
 
@@ -379,8 +435,8 @@ class AnalogWatchCanvasRenderer(
         private const val MINUTE_HAND_WIDTH_FRACTION = 0.0163f
 
         private const val SECOND_HAND_LENGTH_FRACTION = 0.37383f
-        private const val SECOND_HAND_WIDTH_FRACTION = 0.00934f
+        private const val SECOND_HAND_WIDTH_FRACTION = 0.00734f
 
-        private const val GAP_BETWEEN_OUTER_CIRCLE_AND_BORDER_FRACTION = 0.03738f
+        private const val GAP_BETWEEN_OUTER_CIRCLE_AND_BORDER_FRACTION = 0f
     }
 }
